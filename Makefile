@@ -34,9 +34,9 @@ Include := -I $(BVA_ROOT)/include -I $(BVA_ROOT)/$(dir $(BVA_FILE))
 define BVA_echo
 	@echo "[DONE] $1 "
 endef
-CXX := g++ -fPIC -std=c++11
-CXXFLAGS := -fno-rtti -O0 -g
-CC := clang -fPIC
+CXX := g++ -fPIC -std=c++14
+CXXFLAGS := -fno-rtti -O0 -g -DDEBUG
+CC := clang-9 -fPIC
 .PHONY: default clean 
 
 all: copy pass instrument representing_function test
@@ -78,8 +78,8 @@ build/cov.c: src/Type_$(BVA_TYPE)/cov.c
 instrument: build/foo_i.bc 
 	$(BVA_echo) The instrumented program in LLVM bitcode: $< 
 build/foo_i.bc : build/foo_raw.bc 
-	opt -lowerswitch $< -o $<
-	opt -load lib/libATGMO.so -hello2 -funcname=$(BVA_FUNC) < $<  -o $@
+	opt-9 -lowerswitch $< -o $<
+	opt-9 -load lib/libATGMO.so -hello2 -funcname=$(BVA_FUNC) < $<  -o $@
 
 pass: lib/libATGMO.so 
 	$(BVA_echo) The shared library of the LLVM transformation pass: $<
@@ -88,7 +88,7 @@ lib/libATGMO.so: build/ATGMO.o
 	$(CXX)  $(CXXFLAGS) $(DB) $< -Wall -shared -o $@ -fPIC $(Include)
 build/ATGMO.o: src/ATGMO.cpp
 	@mkdir -p build
-	$(CXX) $(CXXFLAGS) $(DB) $< -Wall -c -fno-rtti  `llvm-config --cppflags` -g -fPIC -o $@  $(Include)
+	$(CXX) $(CXXFLAGS) $(DB) $< -Wall -c -fno-rtti  `llvm-config-9 --cppflags` -g -fPIC -o $@  $(Include)
 
 #Put penalty wraper and the instrumented code together (so we have a double->double representing function)
 representing_function: build/libr.so 
@@ -106,7 +106,7 @@ lib/pen.o: src/pen.cpp
 test: build/simple_test
 	$(BVA_echo) Making sanity test 
 build/simple_test: build/test.o
-	g++ -std=c++11 $(DB) $< -Wall  -lr -L build  -lm  -o $@ $(Include)
+	g++ -std=c++14 $(DB) $< -Wall  -lr -L build  -lm  -o $@ $(Include)
 build/test.o: build/test.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 

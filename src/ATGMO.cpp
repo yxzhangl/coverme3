@@ -166,7 +166,7 @@ struct Hello2: public ModulePass {
 
 
 //                         }
-                         DEBUG ( errs() <<"++++++++step1+++++++\n"<<M<<"\n" );
+// DEBUG ( errs() <<"++++++++step1+++++++\n"<<M<<"\n" );
 
 //               builder.CreateStore(here, gvar_double___r, false);
                          /*
@@ -177,7 +177,7 @@ struct Hello2: public ModulePass {
                                         double_call->setAttributes(double_call_PAL);
                          */  //
                          //uncomment this if I want to see the results
-                         DEBUG ( errs() <<"+++++step2++++++++++\n"<<M<<"\n" );
+// DEBUG ( errs() <<"+++++step2++++++++++\n"<<M<<"\n" );
 
                     }
                }//end the two for
