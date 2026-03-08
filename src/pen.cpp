@@ -4,9 +4,127 @@
 #include <assert.h>
 #include <map>
 #include <set>
+#include <algorithm>
 
 static std::set<uint64_t> coveredInstIDs={}; //cover means boundary reached
 static std::set<uint64_t> stagedInstIDs={}; //staged
+
+
+
+enum DistanceStrategy {
+  DIST_ABSOLUTE = 0,    // |x-y| (原始实现)
+  DIST_RELATIVE,        // |x-y| / max(|x|,|y|,ε)
+  DIST_LINEAR,          // |x-y| (与ABSOLUTE相同，保留接口)
+  DIST_NORMALIZED,      // |x-y| / (1+|x|+|y|)
+  DIST_LOG,             // |log(1+|x|) - log(1+|y|)|
+  DIST_AUTO = 99        // 自适应选择
+};
+
+// 全局策略变量（默认原始策略）
+static DistanceStrategy g_distance_strategy = DIST_ABSOLUTE;
+static const double EPSILON = 1e-12;  // 数值安全阈值
+
+// 【新增】C接口：供Python层设置策略
+extern "C" void set_distance_strategy(int strategy) {
+  if (strategy >= DIST_ABSOLUTE && strategy <= DIST_LOG) {
+      g_distance_strategy = static_cast<DistanceStrategy>(strategy);
+  } else if (strategy == DIST_AUTO) {
+      g_distance_strategy = DIST_AUTO;
+  }
+  // 非法值保持当前策略不变
+}
+
+// 【新增】获取当前策略（调试用）
+extern "C" int get_distance_strategy() {
+  return static_cast<int>(g_distance_strategy);
+}
+
+// ============================================================================
+// 【新增】各距离策略实现（静态内联，零开销抽象）
+// ============================================================================
+
+// 辅助：安全绝对值差
+static inline double abs_diff(double x, double y) {
+    return (x >= y) ? (x - y) : (y - x);
+}
+
+// 策略0/2: 绝对距离 |x-y|
+static inline double dist_absolute(double x, double y) {
+    return abs_diff(x, y);
+}
+
+// 策略1: 相对距离 |x-y|/max(|x|,|y|,ε)
+static inline double dist_relative(double x, double y) {
+    double diff = abs_diff(x, y);
+    double max_val = std::fmax(std::fabs(x), std::fmax(std::fabs(y), EPSILON));
+    return diff / max_val;
+}
+
+// 策略3: 归一化距离 |x-y|/(1+|x|+|y|) ∈ [0,1)
+static inline double dist_normalized(double x, double y) {
+    double diff = abs_diff(x, y);
+    return diff / (1.0 + std::fabs(x) + std::fabs(y));
+}
+
+// 策略4: 对数距离 |log(1+|x|) - log(1+|y|)|
+// 使用 log(1+|x|) 避免 x=0 时的 -inf 和负值问题
+static inline double dist_log(double x, double y) {
+    double lx = std::log1p(std::fabs(x));  // log(1+|x|), 数值更稳定
+    double ly = std::log1p(std::fabs(y));
+    return abs_diff(lx, ly);
+}
+
+// 策略99: 自适应策略（根据值域自动选择）
+static inline double dist_auto(double x, double y) {
+    double max_val = std::fmax(std::fabs(x), std::fabs(y));
+    if (max_val < 1e-3) {
+        // 极小值：用相对距离，避免绝对距离梯度消失
+        return dist_relative(x, y);
+    } else if (max_val < 1e4) {
+        // 中等值：用归一化距离，保持梯度稳定
+        return dist_normalized(x, y);
+    } else {
+        // 大值：用对数距离，压缩动态范围
+        return dist_log(x, y);
+    }
+}
+
+// ============================================================================
+// 【替换】主 distance 函数：策略分发入口
+// ============================================================================
+
+static inline double distance(double x, double y) {
+    // 数值安全检查
+    if (std::isnan(x) || std::isnan(y) || std::isinf(x) || std::isinf(y)) {
+        return 1e10;  // 返回大惩罚值，引导优化器远离无效区域
+    }
+    
+    switch (g_distance_strategy) {
+        case DIST_ABSOLUTE:
+        case DIST_LINEAR:   // 两者实现相同
+            return dist_absolute(x, y);
+        case DIST_RELATIVE:
+            return dist_relative(x, y);
+        case DIST_NORMALIZED:
+            return dist_normalized(x, y);
+        case DIST_LOG:
+            return dist_log(x, y);
+        case DIST_AUTO:
+        default:
+            return dist_auto(x, y);
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
 
 
 extern long int __d;
@@ -172,19 +290,5 @@ extern "C" void addHardBranchAsExplored(){
   }
   explored=explored_afterAdd;
 
-}
-
-
-static inline double distance(double x,double y){
-  //return (x-y)*(x-y);
-  return (x>=y)? x-y : y-x;
-  /*
-    if (x-y==0) return 0;
-    double x_=x>0?x:-x;
-    double y_=y>0?y:-y;
-    double bigger=(x_<=y_)? y_:x_;
-    DB("x,y,dist" << x<<","<<y<<","<<(x-y)*(x-y)/(bigger*bigger));
-    return (x-y)*(x-y) / (bigger*bigger);
-  */
 }
 
