@@ -4,7 +4,7 @@
 set -e
 
 # ============ 配置区域 ============
-BENCHMARK="_ieee754_acosh"
+BENCHMARK="s_ceil"
 N_ITER=100
 OUTPUT_DIR="output"
 # ==================================
@@ -28,10 +28,6 @@ for dist_id in "${!DIST_MAP[@]}"; do
     output_file="$OUTPUT_DIR/${BENCHMARK}_dist${dist_id}_${dist_name}.log"
     
     echo "▶️  Running with [$dist_id:$dist_name] ..."
-    
-    # 🔧 关键修复: 
-    # 1. 使用 -V 表示 version（如果需要），-v 现在接受数值
-    # 2. -v 1 表示轻度详细输出
     python3 bva.py \
         -r \
         -d "$dist_id" \
@@ -39,7 +35,6 @@ for dist_id in "${!DIST_MAP[@]}"; do
         -v 1 \
         2>&1 | tee "$output_file"
     
-    # 提取覆盖率
     if grep -qi "coverage" "$output_file"; then
         coverage=$(grep -i "coverage" "$output_file" | tail -1 | grep -oE '[0-9]+\.?[0-9]*' | head -1)
         echo "   ✓ Coverage: ${coverage:-N/A}"
